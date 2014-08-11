@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2011 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 3.0 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -79,6 +79,7 @@ class sc_process_handle {
   public:
     inline sc_process_handle();
     inline explicit sc_process_handle( sc_object* object_p );
+    inline explicit sc_process_handle( sc_process_b* process_p );
     inline sc_process_handle( const sc_process_handle& orig );
     inline ~sc_process_handle();
     inline sc_process_handle& operator = ( sc_process_handle src );
@@ -171,7 +172,6 @@ inline sc_process_handle::sc_process_handle() : m_target_p(0)
 {
 }
 
-
 //------------------------------------------------------------------------------
 //"sc_process_handle::sc_process_handle - pointer constructor"
 //
@@ -186,6 +186,19 @@ inline sc_process_handle::sc_process_handle( sc_object* object_p ) :
     if ( m_target_p ) m_target_p->reference_increment();
 }
 
+//------------------------------------------------------------------------------
+//"sc_process_handle::sc_process_handle - pointer constructor"
+//
+// This version of the object instance constructor for this class creates
+// an object instance whose target is the supplied sc_process_b instance.
+// This saves a dynamic cast compared to the sc_object* case.
+//     process_p -> process instance this is handle for.
+//------------------------------------------------------------------------------
+inline sc_process_handle::sc_process_handle( sc_process_b* process_p ) :
+  m_target_p(process_p)
+{
+  if ( m_target_p ) m_target_p->reference_increment();
+}
 
 //------------------------------------------------------------------------------
 //"sc_process_handle::sc_process_handle - copy constructor"

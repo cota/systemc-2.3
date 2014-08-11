@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2011 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 3.0 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -24,10 +24,13 @@
  CHANGE LOG AT THE END OF THE FILE
  *****************************************************************************/
 
+#include "sysc/kernel/sc_cmnhdr.h"
+#include "sysc/kernel/sc_constants.h"
 #include "sysc/kernel/sc_thread_process.h"
 #include "sysc/kernel/sc_process_handle.h"
 #include "sysc/kernel/sc_simcontext_int.h"
 #include "sysc/kernel/sc_module.h"
+#include "sysc/utils/sc_machine.h"
 
 // DEBUGGING MACROS:
 //
@@ -42,20 +45,62 @@
 #   define DEBUG_MSG(NAME,P,MSG) \
     { \
         if ( P && ( (strlen(NAME)==0) || !strcmp(NAME,P->name())) ) \
-          std::cout << sc_time_stamp() << ": " << P->name() << " ******** " \
-                    << MSG << std::endl; \
+          std::cout << "**** " << sc_time_stamp() << " ("  \
+	            << sc_get_current_process_name() << "): " << MSG \
+		    << " - " << P->name() << std::endl; \
     }
 #else
 #   define DEBUG_MSG(NAME,P,MSG) 
 #endif
 
+
+//------------------------------------------------------------------------------
+// user-defined default stack-size
+//------------------------------------------------------------------------------
+#if defined(SC_OVERRIDE_DEFAULT_STACK_SIZE)
+#   define SC_DEFAULT_STACK_SIZE_ SC_OVERRIDE_DEFAULT_STACK_SIZE
+
+//------------------------------------------------------------------------------
+// architecture-specific default stack sizes
+//------------------------------------------------------------------------------
+#elif !defined(SC_USE_PTHREADS) && (defined(__CYGWIN32__) || defined(__CYGWIN32))
+#   define SC_DEFAULT_STACK_SIZE_ 0x50000
+
+#elif defined(SC_LONG_64) || defined(__x86_64__) || defined(__LP64__) || \
+      defined(_M_X64) || defined(_M_AMD64)
+#   define SC_DEFAULT_STACK_SIZE_ 0x40000
+
+#else
+#   define SC_DEFAULT_STACK_SIZE_ 0x20000
+
+#endif // SC_DEFAULT_STACK_SIZE_
+
+
+//------------------------------------------------------------------------------
+// force 16-byte alignment on coroutine entry functions, needed for
+// QuickThreads (32-bit, see also fixes in qt/md/{i386,iX86_64}.[hs]),
+// and MinGW32 / Cygwin32 compilers on Windows platforms
+#if defined(__GNUC__) && !defined(__ICC) && !defined(__x86_64__) && \
+    (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__ > 1 )
+# define SC_ALIGNED_STACK_ \
+    __attribute__((force_align_arg_pointer))
+#else
+# define SC_ALIGNED_STACK_ /* empty */
+#endif
+
+
 namespace sc_core {
+
+const int SC_DEFAULT_STACK_SIZE   = SC_DEFAULT_STACK_SIZE_;
+#undef SC_DEFAULT_STACK_SIZE_
+#undef SC_OVERRIDE_DEFAULT_STACK_SIZE
 
 //------------------------------------------------------------------------------
 //"sc_thread_cor_fn"
 // 
 // This function invokes the coroutine for the supplied object instance.
 //------------------------------------------------------------------------------
+SC_ALIGNED_STACK_
 void sc_thread_cor_fn( void* arg )
 {
     sc_simcontext*   simc_p = sc_get_curr_simcontext();
@@ -240,13 +285,17 @@ void sc_thread_process::kill_process(sc_descendant_inclusion_info descendants )
         }
     }
 
-    // IF THE PROCESS IS CURRENTLY UNWINDING IGNORE THE KILL:
+    // IF THE PROCESS IS CURRENTLY UNWINDING OR IS ALREADY A ZOMBIE
+    // IGNORE THE KILL:
 
     if ( m_unwinding )
     {
         SC_REPORT_WARNING( SC_ID_PROCESS_ALREADY_UNWINDING_, name() );
-	return; 
+        return;
     }
+
+    if ( m_state & ps_bit_zombie )
+        return;
 
     // SET UP TO KILL THE PROCESS IF SIMULATION HAS STARTED:
     //
@@ -254,7 +303,6 @@ void sc_thread_process::kill_process(sc_descendant_inclusion_info descendants )
 
     if ( sc_is_running() && m_has_stack )
     {
-	if ( m_state & ps_bit_zombie ) return;
         m_throw_status = THROW_KILL;
         m_wait_cycle_n = 0;
         simcontext()->preempt_with(this);
@@ -511,17 +559,17 @@ void sc_thread_process::suspend_process(
 //------------------------------------------------------------------------------
 void sc_thread_process::throw_reset( bool async )
 {     
-    // If the thread to be reset is dead ignore the call.
-
-    if ( m_state & ps_bit_zombie ) return;
-
-    // IF THE PROCESS IS CURRENTLY UNWINDING IGNORE THE RESET:
+    // IF THE PROCESS IS CURRENTLY UNWINDING OR IS ALREADY A ZOMBIE
+    // IGNORE THE RESET:
 
     if ( m_unwinding )
     {
         SC_REPORT_WARNING( SC_ID_PROCESS_ALREADY_UNWINDING_, name() );
-	return; 
+        return;
     }
+
+    if ( m_state & ps_bit_zombie )
+        return;
 
 
     // Set the throw type and clear any pending dynamic events: 
@@ -612,7 +660,7 @@ void sc_thread_process::throw_user( const sc_throw_it_helper& helper,
     if( m_has_stack )
     {
         remove_dynamic_events();
-        DEBUG_MSG(DEBUG_NAME,this,"throwing user exception");
+        DEBUG_MSG(DEBUG_NAME,this,"throwing user exception to");
         m_throw_status = THROW_USER;
         if ( m_throw_helper_p != 0 ) delete m_throw_helper_p;
         m_throw_helper_p = helper.clone();
@@ -628,16 +676,7 @@ void sc_thread_process::throw_user( const sc_throw_it_helper& helper,
 //------------------------------------------------------------------------------
 //"sc_thread_process::trigger_dynamic"
 //
-// This method returns the status of this object instance with respect to 
-// the supplied event. There are 3 potential values to return:
-//   dt_rearm      - don't execute the thread and don't remove it from the
-//                   event's queue.
-//   dt_remove     - the thread should not be scheduled for execution and
-//                   the process should be moved from the event's thread queue.
-//   dt_run        - the thread should be scheduled for execution but the
-//                   the proces should stay on the event's thread queue.
-//   dt_run_remove - the thread should be scheduled for execution and the
-//                   process should be removed from the event's thread queue.
+// This method sets up a dynamic trigger on an event.
 //
 // Notes:
 //   (1) This method is identical to sc_method_process::trigger_dynamic(), 
@@ -646,6 +685,7 @@ void sc_thread_process::throw_user( const sc_throw_it_helper& helper,
 //       have different overloads for sc_thread_process* and sc_method_process*.
 //       So if you change code here you'll also need to change it in 
 //       sc_method_process.cpp.
+//
 // Result is true if this process should be removed from the event's list,
 // false if not.
 //------------------------------------------------------------------------------
@@ -655,12 +695,22 @@ bool sc_thread_process::trigger_dynamic( sc_event* e )
 
     m_timed_out = false;
 
-    // If this thread is already runnable then we are done, flush the event.
+    // Escape cases:
+    //   (a) If this thread issued the notify() don't schedule it for
+    //       execution, but leave the sensitivity in place.
+    //   (b) If this thread is already runnable can't trigger an event.
 
-    if( is_runnable() )
+    // not possible for thread processes!
+#if 0 // ! defined( SC_ENABLE_IMMEDIATE_SELF_NOTIFICATIONS )
+    if ( sc_get_current_process_b() == (sc_process_b*)this )
     {
-        return true;
+        report_immediate_self_notification();
+        return false;
     }
+#endif // SC_ENABLE_IMMEDIATE_SELF_NOTIFICATIONS
+
+    if( is_runnable() ) 
+        return true;
 
     // If a process is disabled then we ignore any events, leaving them enabled:
     //

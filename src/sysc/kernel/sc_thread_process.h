@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2011 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 3.0 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -49,12 +49,14 @@
 #   define DEBUG_MSG(NAME,P,MSG) \
     { \
         if ( P && ( (strlen(NAME)==0) || !strcmp(NAME,P->name())) ) \
-          std::cout << sc_time_stamp() << ": " << P->name() << " ******** " \
-                    << MSG << std::endl; \
+          std::cout << "**** " << sc_time_stamp() << " ("  \
+	            << sc_get_current_process_name() << "): " << MSG \
+		    << " - " << P->name() << std::endl; \
     }
 #else
 #   define DEBUG_MSG(NAME,P,MSG) 
 #endif
+
 
 namespace sc_core {
 
@@ -161,7 +163,6 @@ class sc_thread_process : public sc_process_b {
 
   protected:
     sc_cor*                          m_cor_p;        // Thread's coroutine.
-    static sc_cor*                   m_dead_cor_p;   // Coroutine to delete.
     std::vector<sc_process_monitor*> m_monitor_q;    // Thread monitors.
     std::size_t                      m_stack_size;   // Thread stack size.
     int                              m_wait_cycle_n; // # of waits to be done.
@@ -234,12 +235,12 @@ inline void sc_thread_process::suspend_me()
     {
       case THROW_ASYNC_RESET:
       case THROW_SYNC_RESET:
-        DEBUG_MSG( DEBUG_NAME , this,"throwing reset");
+        DEBUG_MSG( DEBUG_NAME , this, "throwing reset for");
 	if ( m_reset_event_p ) m_reset_event_p->notify();
         throw sc_unwind_exception( this, true ); 
 
       case THROW_USER:
-        DEBUG_MSG( DEBUG_NAME, this, "throwing user exception");
+        DEBUG_MSG( DEBUG_NAME, this, "invoking throw_it for");
 	m_throw_status = m_active_areset_n ? THROW_ASYNC_RESET :
 	                                  (m_active_reset_n ? THROW_SYNC_RESET :
 			                  THROW_NONE);
@@ -247,7 +248,7 @@ inline void sc_thread_process::suspend_me()
 	break;
 
       case THROW_KILL:
-        DEBUG_MSG( DEBUG_NAME, this, "throwing kill");
+        DEBUG_MSG( DEBUG_NAME, this, "throwing kill for");
 	throw sc_unwind_exception( this, false );
 
       default: // THROWING_NOW
@@ -440,14 +441,18 @@ inline sc_cor* get_cor_pointer( sc_process_b* process_p )
 //------------------------------------------------------------------------------
 //"sc_thread_process::trigger_static"
 //
-// This inline method returns true if this object instance should be placed on 
-// the queue of runnable processes. This is the case if the following criteria
+// This inline method adds the current thread to the queue of runnable
+// processes, if required.  This is the case if the following criteria
 // are met:
 //   (1) The process is in a runnable state.
 //   (2) The process is not already on the run queue.
-//   (3) The process is expecting a static trigger, dynamic event waits take
-//       priority.
+//   (3) The process is expecting a static trigger,
+//       dynamic event waits take priority.
 //   (4) The process' static wait count is zero.
+//
+// If the triggering process is the same process, the trigger is
+// ignored as well, unless SC_ENABLE_IMMEDIATE_SELF_NOTIFICATIONS
+// is defined.
 //------------------------------------------------------------------------------
 inline
 void
@@ -459,16 +464,22 @@ sc_thread_process::trigger_static()
     //    (c) its waiting on a dynamic event
     //    (d) its wait count is not satisfied
 
-    if ( (m_state & ps_bit_disabled) || is_runnable() || 
-         (sc_get_current_process_b() == (sc_process_b*)this) ||
-         m_trigger_type != STATIC )
+    if ( (m_state & ps_bit_disabled) || is_runnable() ||
+          m_trigger_type != STATIC )
+        return;
+
+#if ! defined( SC_ENABLE_IMMEDIATE_SELF_NOTIFICATIONS )
+    if( SC_UNLIKELY_( sc_get_current_process_b() == this ) )
     {
+        report_immediate_self_notification();
         return;
     }
+#endif // SC_ENABLE_IMMEDIATE_SELF_NOTIFICATIONS
+
     if ( m_wait_cycle_n > 0 )
     {
-	--m_wait_cycle_n;
-	return;
+        --m_wait_cycle_n;
+        return;
     }
 
     // If we get here then the thread is has satisfied its wait criteria, if 

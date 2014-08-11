@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2006 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 2.4 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -78,7 +78,6 @@
 #include "sysc/kernel/sc_object.h"
 #include "sysc/datatypes/misc/sc_value_base.h"
 #include "sysc/utils/sc_temporary.h"
-#include "sysc/utils/sc_string.h"
 #include "sysc/datatypes/bit/sc_bv.h"
 #include "sysc/datatypes/bit/sc_lv.h"
 #include "sysc/datatypes/int/sc_int_base.h"
@@ -244,7 +243,12 @@ public:
 	    result_p->ndigits = DIV_CEIL(result_p->nbits);
             result_p->digit = (sc_digit*)sc_core::sc_temp_heap.allocate( 
                 sizeof(sc_digit)*result_p->ndigits );
-	    result_p->digit[result_p->ndigits-1] = 0;
+#if defined(_MSC_VER)
+            // workaround spurious initialisation issue on MS Visual C++
+            memset( result_p->digit, 0, sizeof(sc_digit)*result_p->ndigits );
+#else
+            result_p->digit[result_p->ndigits-1] = 0;
+#endif
             right_non_zero = m_right_p->concat_get_data( result_p->digit, 0 );
             left_non_zero = m_left_p->concat_get_data(result_p->digit, m_len_r); 
             if ( left_non_zero || right_non_zero ) 

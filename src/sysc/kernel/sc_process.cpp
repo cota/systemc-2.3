@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2011 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 3.0 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -134,7 +134,7 @@ void sc_process_b::disconnect_process()
     remove_dynamic_events();
     remove_static_events();
 
-    for ( size_t rst_i = 0; rst_i < m_resets.size(); rst_i++ )
+    for ( std::vector<sc_reset*>::size_type rst_i = 0; rst_i < m_resets.size(); rst_i++ )
     {
         m_resets[rst_i]->remove_process( this );
     }
@@ -336,13 +336,31 @@ sc_process_b::remove_static_events()
 // the process' name() appended to the report.
 //------------------------------------------------------------------------------
 void
-sc_process_b::report_error( const char* msgid, const char* msg )
+sc_process_b::report_error( const char* msgid, const char* msg ) const
 {
     std::stringstream sstr;
     if( msg && msg[0] )
         sstr << msg << ": ";
     sstr << name();
     SC_REPORT_ERROR( msgid, sstr.str().c_str() );
+}
+
+
+//------------------------------------------------------------------------------
+// "sc_process_b::report_immediate_self_notification"
+//
+// This method is used to report an immediate self-notification
+// that used to trigger the process before the clarification in 1666-2011.
+// The warning is only reported once.
+//------------------------------------------------------------------------------
+void
+sc_process_b::report_immediate_self_notification() const
+{
+    static bool once = false;
+    if( !once ) {
+      SC_REPORT_WARNING( SC_ID_IMMEDIATE_SELF_NOTIFICATION_, name() );
+      once = true;
+    }
 }
 
 //------------------------------------------------------------------------------

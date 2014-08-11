@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2011 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 3.0 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -29,8 +29,10 @@
 #include "sysc/communication/sc_communication_ids.h"
 #include "sysc/kernel/sc_simcontext.h"
 #include "sysc/kernel/sc_module.h"
-#if defined(SC_INCLUDE_ASYNC_UPDATES)
-#   include "sysc/communication/sc_host_mutex.h"
+#include "sysc/kernel/sc_object_int.h"
+
+#ifndef SC_DISABLE_ASYNC_UPDATES
+#  include "sysc/communication/sc_host_mutex.h"
 #endif
 
 namespace sc_core {
@@ -85,11 +87,8 @@ void sc_prim_channel::before_end_of_elaboration()
 void
 sc_prim_channel::construction_done()
 {
-    sc_module* parent = DCAST<sc_module*>( get_parent_object() );
-    if( parent ) simcontext()->hierarchy_push( parent );
-
+    sc_object::hierarchy_scope scope( get_parent_object() );
     before_end_of_elaboration();
-    if( parent ) simcontext()->hierarchy_pop();
 }
 
 // called by elaboration_done (does nothing by default)
@@ -104,10 +103,8 @@ sc_prim_channel::end_of_elaboration()
 void
 sc_prim_channel::elaboration_done()
 {
-    sc_module* parent = DCAST<sc_module*>( get_parent_object() );
-    if( parent ) simcontext()->hierarchy_push( parent );
+    sc_object::hierarchy_scope scope( get_parent_object() );
     end_of_elaboration();
-    if( parent ) simcontext()->hierarchy_pop();
 }
 
 // called by start_simulation (does nothing)
@@ -121,10 +118,8 @@ sc_prim_channel::start_of_simulation()
 void
 sc_prim_channel::start_simulation()
 {
-    sc_module* parent = DCAST<sc_module*>( get_parent_object() );
-    if( parent ) simcontext()->hierarchy_push( parent );
+    sc_object::hierarchy_scope scope( get_parent_object() );
     start_of_simulation();
-    if( parent ) simcontext()->hierarchy_pop();
 }
 
 // called by simulation_done (does nothing)
@@ -138,10 +133,8 @@ sc_prim_channel::end_of_simulation()
 void
 sc_prim_channel::simulation_done()
 {
-    sc_module* parent = DCAST<sc_module*>( get_parent_object() );
-    if( parent ) simcontext()->hierarchy_push( parent );
+    sc_object::hierarchy_scope scope( get_parent_object() );
     end_of_simulation();
-    if( parent ) simcontext()->hierarchy_pop();
 }
 
 // ----------------------------------------------------------------------------
@@ -153,7 +146,7 @@ sc_prim_channel::simulation_done()
 
 class sc_prim_channel_registry::async_update_list
 {
-#ifdef SC_INCLUDE_ASYNC_UPDATES
+#ifndef SC_DISABLE_ASYNC_UPDATES
 public:
 
     bool pending() const
@@ -193,7 +186,7 @@ private:
     std::vector< sc_prim_channel* > m_push_queue;
     std::vector< sc_prim_channel* > m_pop_queue;
 
-#endif // SC_INCLUDE_ASYNC_UPDATES
+#endif // ! SC_DISABLE_ASYNC_UPDATES
 };
 
 // ----------------------------------------------------------------------------
@@ -250,7 +243,7 @@ sc_prim_channel_registry::remove( sc_prim_channel& prim_channel_ )
 bool
 sc_prim_channel_registry::pending_async_updates() const
 {
-#ifdef SC_INCLUDE_ASYNC_UPDATES
+#ifndef SC_DISABLE_ASYNC_UPDATES
     return m_async_update_list_p->pending();
 #else
     return false;
@@ -260,7 +253,7 @@ sc_prim_channel_registry::pending_async_updates() const
 void
 sc_prim_channel_registry::async_request_update( sc_prim_channel& prim_channel_ )
 {
-#ifdef SC_INCLUDE_ASYNC_UPDATES
+#ifndef SC_DISABLE_ASYNC_UPDATES
     m_async_update_list_p->append( prim_channel_ );
 #else
     SC_REPORT_ERROR( SC_ID_NO_ASYNC_UPDATE_, prim_channel_.name() );
@@ -279,7 +272,7 @@ sc_prim_channel_registry::perform_update()
     // Update the values for the primitive channels set external to the
     // simulator.
 
-#ifdef SC_INCLUDE_ASYNC_UPDATES
+#ifndef SC_DISABLE_ASYNC_UPDATES
     if( m_async_update_list_p->pending() )
 	m_async_update_list_p->accept_updates();
 #endif
@@ -308,7 +301,7 @@ sc_prim_channel_registry::sc_prim_channel_registry( sc_simcontext& simc_ )
   ,  m_simc( &simc_ )
   ,  m_update_list_p((sc_prim_channel*)sc_prim_channel::list_end)
 {
-#   if defined(SC_INCLUDE_ASYNC_UPDATES)
+#   ifndef SC_DISABLE_ASYNC_UPDATES
         m_async_update_list_p = new async_update_list();
 #   endif
 }

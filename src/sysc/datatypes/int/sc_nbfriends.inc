@@ -1,14 +1,14 @@
 /*****************************************************************************
 
   The following code is derived, directly or indirectly, from the SystemC
-  source code Copyright (c) 1996-2005 by all Contributors.
+  source code Copyright (c) 1996-2014 by all Contributors.
   All Rights reserved.
 
   The contents of this file are subject to the restrictions and limitations
-  set forth in the SystemC Open Source License Version 2.3 (the "License");
+  set forth in the SystemC Open Source License (the "License");
   You may not use this file except in compliance with such restrictions and
   limitations. You may obtain instructions on how to receive a copy of the
-  License at http://www.systemc.org/. Software distributed by Contributors
+  License at http://www.accellera.org/. Software distributed by Contributors
   under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF
   ANY KIND, either express or implied. See the License for the specific
   language governing rights and limitations under the License.
@@ -17,7 +17,7 @@
 
 /*****************************************************************************
 
-  sc_nbfriends.cpp -- Friend functions for both sc_signed and sc_unsigned
+  sc_nbfriends.inc -- Friend functions for both sc_signed and sc_unsigned
                       classes. The vec_* functions are called through either
                       these functions or those in sc_nbexterns.cpp. These
                       functions perform their work on two inputs u and v, and
@@ -108,7 +108,7 @@ ADD_HELPER(small_type us, int unb, int und,
     
     if (cmp_res == 0) { // u == v
 #ifndef SC_MAX_NBITS
-      delete d;
+      delete[] d;
 #endif
       return CLASS_TYPE();
     }
@@ -309,9 +309,12 @@ MOD_HELPER(small_type us,
 
   us = check_for_zero(us, nd - 1, d);
 
-  if (us == SC_ZERO)
+  if (us == SC_ZERO) {
+#ifndef SC_MAX_NBITS
+    delete[] d;
+#endif
     return CLASS_TYPE();
-  else
+  } else
     return CLASS_TYPE(us, sc_min(unb, vnb), nd - 1, d);
 
 }
@@ -342,8 +345,8 @@ AND_HELPER(small_type us,
 
   sc_digit *d = dbegin;
 
-  register const sc_digit *x;
-  register const sc_digit *y;
+  const sc_digit *x;
+  const sc_digit *y;
   int xnd;
   int ynd;
   small_type xs;
@@ -386,8 +389,8 @@ AND_HELPER(small_type us,
     }
     else {  // case 3
 
-      register sc_digit xcarry = 1;
-      register sc_digit ycarry = 1;
+      sc_digit xcarry = 1;
+      sc_digit ycarry = 1;
 
       while (y < yend) {
         xcarry += (~(*x++) & DIGIT_MASK);
@@ -411,7 +414,7 @@ AND_HELPER(small_type us,
 
     if (xs > 0) { // case 4
 
-      register sc_digit ycarry = 1;
+      sc_digit ycarry = 1;
 
       while (y < yend) {
         ycarry += (~(*y++) & DIGIT_MASK);
@@ -428,7 +431,7 @@ AND_HELPER(small_type us,
     }
     else {  // case 5
 
-      register sc_digit xcarry = 1;
+      sc_digit xcarry = 1;
 
       while (y < yend) {
         xcarry += (~(*x++) & DIGIT_MASK);
@@ -474,8 +477,8 @@ OR_HELPER(small_type us,
 
   sc_digit *d = dbegin;
 
-  register const sc_digit *x;
-  register const sc_digit *y;
+  const sc_digit *x;
+  const sc_digit *y;
   int xnd;
   int ynd;
   small_type xs;
@@ -518,8 +521,8 @@ OR_HELPER(small_type us,
     }
     else {  // case 4
 
-      register sc_digit xcarry = 1;
-      register sc_digit ycarry = 1;
+      sc_digit xcarry = 1;
+      sc_digit ycarry = 1;
 
       while (y < yend) {
         xcarry += (~(*x++) & DIGIT_MASK);
@@ -544,7 +547,7 @@ OR_HELPER(small_type us,
 
     if (xs > 0) { // case 5
 
-      register sc_digit ycarry = 1;
+      sc_digit ycarry = 1;
 
       while (y < yend) {
         ycarry += (~(*y++) & DIGIT_MASK);
@@ -561,7 +564,7 @@ OR_HELPER(small_type us,
     }
     else {  // case 6
 
-      register sc_digit xcarry = 1;
+      sc_digit xcarry = 1;
 
       while (y < yend) {
         xcarry += (~(*x++) & DIGIT_MASK);
@@ -610,8 +613,8 @@ XOR_HELPER(small_type us,
 
   sc_digit *d = dbegin;
 
-  register const sc_digit *x;
-  register const sc_digit *y;
+  const sc_digit *x;
+  const sc_digit *y;
   int xnd;
   int ynd;
   small_type xs;
@@ -654,8 +657,8 @@ XOR_HELPER(small_type us,
     }
     else {  // case 4
 
-      register sc_digit xcarry = 1;
-      register sc_digit ycarry = 1;
+      sc_digit xcarry = 1;
+      sc_digit ycarry = 1;
 
       while (y < yend) {
         xcarry += (~(*x++) & DIGIT_MASK);
@@ -679,7 +682,7 @@ XOR_HELPER(small_type us,
 
     if (xs > 0) { // case 5
 
-      register sc_digit ycarry = 1;
+      sc_digit ycarry = 1;
 
       while (y < yend) {
         ycarry += (~(*y++) & DIGIT_MASK);
@@ -696,7 +699,7 @@ XOR_HELPER(small_type us,
     }
     else {  // case 6
 
-      register sc_digit xcarry = 1;
+      sc_digit xcarry = 1;
 
       while (y < yend) {
         xcarry += (~(*x++) & DIGIT_MASK);
