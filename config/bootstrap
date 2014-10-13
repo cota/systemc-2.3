@@ -4,12 +4,12 @@ if [ "`uname -s`" = "Darwin" ]
 then
     aclocal -I config && \
            glibtoolize --automake --force --copy && \
-           automake --add-missing --copy && \
+           automake --copy && \
            autoconf 
 else
     aclocal -I config && \
            libtoolize --automake --force --copy && \
-           automake --add-missing --copy && \
+           automake --copy && \
            autoconf 
 fi
 # Taf!
